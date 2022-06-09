@@ -11,10 +11,11 @@ from selenium.common.exceptions import NoSuchElementException
 from logintype import LoginType
 import time
 
-class NanacoAutoFiller:
-    __results = {'success':[], 'fairule':[]}
 
-    def __init__(self, login_type, use_canary, is_quiet, is_docker):
+class NanacoAutoFiller:
+    __results = {'success': [], 'fairule': []}
+
+    def __init__(self, login_type, use_canary, is_quiet, is_docker, is_codes_in_email):
         self.__use_canary = use_canary
         self.__login_type = login_type
         self.__is_quiet = is_quiet
@@ -25,10 +26,14 @@ class NanacoAutoFiller:
         self.__driver.implicitly_wait(3)
         # ログインに必要な情報を読み込む
         with open('.secret') as f:
-            self.__CREDENTIALS = f.read().strip().split('\t')
+            self.__CREDENTIALS = f.read().strip().split()
         # コードを全て取得する
         with open('.giftcodes') as f:
-            self.__codes = f.read().splitlines()
+            if not is_codes_in_email:
+                self.__codes = f.read().splitlines()
+            else:
+                self.__codes = [_line.split()[0]
+                                for _line in f.read().splitlines()]
 
     def __init_driver(self):
         '''Chrome起動時のオプションの設定をしてドライバを返す'''
@@ -40,29 +45,35 @@ class NanacoAutoFiller:
         if self.__use_canary:
             options.binary_location = '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary'
         else:
-            options.binary_location = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+            pass
+            # options.binary_location = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
         if self.__is_quiet:
             options.add_argument('headless')
         options.add_argument('window-size=1200x600')
         return webdriver.Chrome(options=options)
 
-    def __input_codes(self,code):
+    def __input_codes(self, code):
         '''ギフトコードを入力する'''
         SPLIT_LENGTH = 4
-        SPLITED_CODES = [code[i: i + SPLIT_LENGTH] for i in range(0, len(code), SPLIT_LENGTH)]
+        SPLITED_CODES = [code[i: i + SPLIT_LENGTH]
+                         for i in range(0, len(code), SPLIT_LENGTH)]
         # コードを入力する
         for i in range(SPLIT_LENGTH):
-            ID = 'gift0' + str(i+1) # gift01 to gift04
+            ID = 'gift0' + str(i+1)  # gift01 to gift04
             self.__driver.find_element_by_id(ID).send_keys(SPLITED_CODES[i])
 
     def __login(self):
         '''nanacoのサイトにログインする'''
         if self.__login_type is LoginType.NET:
-            EMAIL = self.__driver.find_element_by_css_selector('#loginByPassword input[type=text]')
-            PASSWORD = self.__driver.find_element_by_css_selector('#loginByPassword input[type=password]')
+            EMAIL = self.__driver.find_element_by_css_selector(
+                '#loginByPassword input[type=text]')
+            PASSWORD = self.__driver.find_element_by_css_selector(
+                '#loginByPassword input[type=password]')
         elif self.__login_type is LoginType.CARD:
-            EMAIL = self.__driver.find_element_by_css_selector('#loginByCard input[name=XCID]')
-            PASSWORD = self.__driver.find_element_by_css_selector('#loginByCard input[name=SECURITY_CD]')
+            EMAIL = self.__driver.find_element_by_css_selector(
+                '#loginByCard input[name=XCID]')
+            PASSWORD = self.__driver.find_element_by_css_selector(
+                '#loginByCard input[name=SECURITY_CD]')
 
         EMAIL.send_keys(self.__CREDENTIALS[0])
         PASSWORD.send_keys(self.__CREDENTIALS[1])
@@ -74,7 +85,8 @@ class NanacoAutoFiller:
     def __register(self):
         '''登録するボタンを押す'''
         try:
-            self.__driver.find_element_by_css_selector('#nav2Next input[type=image]').click()
+            self.__driver.find_element_by_css_selector(
+                '#nav2Next input[type=image]').click()
             return True
         except NoSuchElementException:
             return False
@@ -92,11 +104,13 @@ class NanacoAutoFiller:
 
     def __go_to_register_page(self):
         '''ギフトコード入力ページへアクセス'''
-        self.__driver.find_element_by_css_selector('#register input[type=image]').click()
+        self.__driver.find_element_by_css_selector(
+            '#register input[type=image]').click()
 
     def __get_register_page_handle(self):
         '''ギフトコード入力ページ（別ウィンドウ）のハンドラを取得する'''
-        WebDriverWait(self.__driver, 3).until(lambda d: len(d.window_handles) > 1)
+        WebDriverWait(self.__driver, 3).until(
+            lambda d: len(d.window_handles) > 1)
         gift_page_handle = self.__driver.window_handles[1]
         return gift_page_handle
 
@@ -115,7 +129,7 @@ class NanacoAutoFiller:
             self.__go_to_register_page()
 
             # ギフト登録ページのウィンドウに制御を移す
-            main_page =  self.__driver.window_handles[0]
+            main_page = self.__driver.window_handles[0]
 
             register_page_handle = self.__get_register_page_handle()
             self.__driver.switch_to.window(register_page_handle)
@@ -142,6 +156,7 @@ class NanacoAutoFiller:
         print('FAIRULE: ' + str(len(self.__results["fairule"])))
         pprint(self.__results["fairule"])
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -158,16 +173,23 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         "-q", "--quiet",
-       help="Chromeのheadless modeを利用する",
-       action="store_true"
+        help="Chromeのheadless modeを利用する",
+        action="store_true"
     )
     parser.add_argument(
         "-d", "--docker",
-       help="Option used for dockerized nagias",
-       action="store_true"
+        help="Option used for dockerized nagias",
+        action="store_true"
+    )
+    parser.add_argument(
+        "-e", "--email",
+        help="Option used for email copy-and-paste input",
+        action="store_true",
+        default=0
     )
     args = parser.parse_args()
 
-    nanaco = NanacoAutoFiller(LoginType(args.login_type), args.use_canary, args.quiet, args.docker)
+    nanaco = NanacoAutoFiller(
+        LoginType(args.login_type), args.use_canary, args.quiet, args.docker, args.email)
     nanaco.main()
     nanaco.output()

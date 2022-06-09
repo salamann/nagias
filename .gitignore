@@ -2,3 +2,6 @@ env/
 .secret
 .giftcodes
 *.png
+.venv/
+__pycache__/
+.python-version
