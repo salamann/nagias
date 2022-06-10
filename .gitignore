@@ -1,6 +1,6 @@
 env/
 .secret
-.giftcodes
+*.giftcodes
 *.png
 .venv/
 __pycache__/
